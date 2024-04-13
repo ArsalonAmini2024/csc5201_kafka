@@ -15,10 +15,10 @@ from datetime import timedelta
 import time
 import yfinance as yf
 
-def get_latest_stock_price(stock):
-    data = stock.history()
-    latest_stock_price = data['Close'].iloc[-1]
-    return latest_stock_price
+def get_latest_stock_data(stock):
+    data = stock.history(period="1d", interval="1m")
+    latest_data = data.iloc[-1]  # Get the latest row
+    return latest_data
 
 def get_today():
     return date.today()
@@ -36,7 +36,7 @@ if __name__ == '__main__':
     # Parse the command line.
     parser = ArgumentParser()
     parser.add_argument('config_file', type=FileType('r'))
-    parser.add_argument('ticker', default='QQQ')
+    parser.add_argument('--tickers', nargs='+', default=['NVDA', 'AAPL', 'META', 'NFLX', 'AMZN'])
     args = parser.parse_args()
 
     # Parse the configuration.
@@ -45,9 +45,8 @@ if __name__ == '__main__':
     config_parser.read_file(args.config_file)
     config = dict(config_parser['default'])
 
-    # read the ticker
-    ticker = args.ticker
-    print('ticker', ticker)
+    tickers = args.tickers
+    print('tickers', tickers)
 
     # Create Producer instance
     producer = Producer(config)
@@ -62,24 +61,22 @@ if __name__ == '__main__':
             print("Produced event to topic {topic}: key = {key:12} value = {value:12}".format(
                 topic=msg.topic(), key=msg.key().decode('utf-8'), value=msg.value().decode('utf-8')))
 
-    count = 0
-    # Produce data by repeatedly fetching today's stock prices - feel free to change
+    # Produce data for each ticker every 5 seconds
     while True:
+        for ticker in tickers:
+            # Fetch latest stock data
+            stock = yf.Ticker(ticker)
+            latest_data = get_latest_stock_data(stock)
 
-        # date range
-        # sd = get_today()
-        sd = get_date_from_string('2024-04-01')
-        ed = sd + timedelta(days=1)
-        # download data
-        dfvp = yf.download(tickers=ticker, start=sd, end=ed, interval="1m")
+            # Extract open, high, low, close, and volume
+            open_price = latest_data['Open']
+            high_price = latest_data['High']
+            low_price = latest_data['Low']
+            close_price = latest_data['Close']
+            volume = latest_data['Volume']
 
-        topic = ticker
-        for index, row in dfvp.iterrows():
-            print(index, row['Close']) # debug only
-            producer.produce(topic, str(index), str(row['Close']), callback=delivery_callback)
-            count += 1
+            # Send data to Kafka topic
+            topic = ticker
+            producer.produce(topic, key=str(get_today()), value=f"Open: {open_price}, High: {high_price}, Low: {low_price}, Close: {close_price}, Volume: {volume}", callback=delivery_callback)
+            producer.flush()
             time.sleep(5)
-
-        # Block until the messages are sent.
-        producer.poll(10000)
-        producer.flush()

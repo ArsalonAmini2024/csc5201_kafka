@@ -9,7 +9,7 @@ if __name__ == '__main__':
     # Parse the command line.
     parser = ArgumentParser()
     parser.add_argument('config_file', type=FileType('r'))
-    parser.add_argument('ticker', default='QQQ')
+    parser.add_argument('--tickers', nargs='+', default=['NVDA', 'AAPL', 'META', 'NFLX', 'AMZN'])
     parser.add_argument('--reset', action='store_true')
     args = parser.parse_args()
 
@@ -20,8 +20,8 @@ if __name__ == '__main__':
     config = dict(config_parser['default'])
     config.update(config_parser['consumer'])
 
-    ticker = args.ticker
-    print('ticker', ticker)
+    tickers = args.tickers
+    print('tickers', tickers)
 
     # Create Consumer instance
     consumer = Consumer(config)
@@ -33,10 +33,10 @@ if __name__ == '__main__':
                 p.offset = OFFSET_BEGINNING
             consumer.assign(partitions)
 
-    # Subscribe to topic
-    topic = ticker
-    consumer.subscribe([topic], on_assign=reset_offset)
-    print('topic', topic)
+    # Subscribe to topics
+    topics = tickers
+    consumer.subscribe(topics, on_assign=reset_offset)
+    print('topics', topics)
 
     # Poll for new messages from Kafka and print them.
     try:
